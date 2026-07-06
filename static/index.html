@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hostel Room Exchange</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Hostel Room Exchange (Double Occupancy)</h1>
+
+      <div id="authCard" class="card">
+        <div class="grid-2">
+          <div>
+            <h2>Signup</h2>
+            <p>Create your password using your preloaded scholar number.</p>
+            <form id="signupForm">
+              <label>Scholar Number</label>
+              <input id="signupScholar" required />
+              <label>Password</label>
+              <input id="signupPassword" type="password" required minlength="8" />
+              <button type="submit">Create Account</button>
+            </form>
+          </div>
+          <div>
+            <h2>Login</h2>
+            <form id="loginForm">
+              <label>Scholar Number</label>
+              <input id="loginScholar" required />
+              <label>Password</label>
+              <input id="loginPassword" type="password" required minlength="8" />
+              <button type="submit">Login</button>
+            </form>
+          </div>
+        </div>
+        <p id="authMessage"></p>
+      </div>
+
+      <div id="dashboard" class="hidden">
+        <div class="card">
+          <h2>My Dashboard</h2>
+          <p id="meInfo"></p>
+          <button id="logoutBtn" class="secondary">Logout</button>
+        </div>
+
+        <div class="card">
+          <h3>Submit / Update Exchange Vote</h3>
+          <form id="submissionForm">
+            <label>Do you want to change room?</label>
+            <select id="wantsChange">
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+
+            <div id="roommateFields">
+              <label>Wanted Roommate Name</label>
+              <input id="wantedName" />
+              <label>Wanted Roommate Scholar Number</label>
+              <input id="wantedScholar" />
+            </div>
+
+            <label>Notes (optional)</label>
+            <textarea id="notes" rows="3"></textarea>
+            <button type="submit">Save Submission</button>
+          </form>
+          <p id="submissionMessage"></p>
+        </div>
+
+        <div class="card">
+          <h3>All Student Submissions</h3>
+          <p>Students can view individual submissions.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Scholar #</th>
+                <th>Hostel</th>
+                <th>Room</th>
+                <th>Wants Change</th>
+                <th>Wanted Roommate</th>
+                <th>Wanted Scholar #</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody id="submissionsBody"></tbody>
+          </table>
+        </div>
+
+        <div id="adminCard" class="card hidden">
+          <h3>Admin Tools</h3>
+          <button id="downloadCsvBtn">Download CSV Export</button>
+        </div>
+      </div>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+  </html>
