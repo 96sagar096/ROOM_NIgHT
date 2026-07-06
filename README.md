@@ -55,6 +55,20 @@ cp .env.example .env
 docker compose up --build
 ```
 
+## Vercel deployment
+Vercel is now configured through `vercel.json` + `api/index.py`.
+
+Important:
+- Do **not** use local SQLite for Vercel production.
+- Set `DATABASE_URL` to a persistent managed DB (PostgreSQL recommended).
+- Set `SECRET_KEY` in Vercel environment variables.
+
+After setting production `DATABASE_URL`, run the import script against that database once:
+```bash
+DATABASE_URL="postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME" \
+python scripts/import_students.py --file /path/to/pasted-students.txt --reset-db
+```
+
 ## Admin access
 Users are marked admin automatically when their scholar number is listed in:
 ```
