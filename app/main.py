@@ -11,11 +11,15 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import Base, ExchangeCycle, Student, VoteSubmission
+from app.models import Base, ExchangeCycle, RoomAllocation, Student, VoteSubmission
 from app.schemas import (
     ActiveCycleOut,
+    AllocationOut,
+    AllocationRunResponse,
     AuthResponse,
     LoginRequest,
+    PairOut,
+    RoomOut,
     SignupRequest,
     SubmissionOut,
     SubmissionUpsertRequest,
@@ -88,6 +92,113 @@ def build_submissions_query(
     if conditions:
         query = query.filter(and_(*conditions))
     return query.order_by(VoteSubmission.updated_at.desc())
+
+
+def serialize_allocation(allocation: RoomAllocation) -> AllocationOut:
+    return AllocationOut(
+        id=allocation.id,
+        hostel_number=allocation.hostel_number,
+        room_number=allocation.room_number,
+        student_one_scholar_number=allocation.student_one.scholar_number,
+        student_one_name=allocation.student_one.full_name,
+        student_two_scholar_number=allocation.student_two.scholar_number,
+        student_two_name=allocation.student_two.full_name,
+        created_at=allocation.created_at,
+    )
+
+
+def run_room_allocation(db: Session, cycle: ExchangeCycle) -> AllocationRunResponse:
+    changing_submissions = (
+        db.query(VoteSubmission)
+        .join(Student)
+        .filter(VoteSubmission.cycle_id == cycle.id, VoteSubmission.wants_change.is_(True))
+        .all()
+    )
+    submission_by_student_id = {item.student_id: item for item in changing_submissions}
+    student_by_scholar = {item.student.scholar_number: item.student for item in changing_submissions}
+
+    room_occupants: dict[tuple[str, str], list[Student]] = {}
+    for student in db.query(Student).all():
+        room_occupants.setdefault((student.hostel_number, student.room_number), []).append(student)
+
+    empty_rooms: list[tuple[str, str]] = []
+    for room_key, occupants in room_occupants.items():
+        if len(occupants) != 2:
+            continue
+        if all(occupant.id in submission_by_student_id for occupant in occupants):
+            empty_rooms.append(room_key)
+    empty_rooms.sort(key=lambda item: (item[0], item[1]))
+
+    pair_keys: set[tuple[str, str]] = set()
+    mutual_pairs: list[tuple[Student, Student]] = []
+    for submission in changing_submissions:
+        target_scholar = submission.wanted_roommate_scholar_number
+        if not target_scholar:
+            continue
+        target_student = student_by_scholar.get(target_scholar)
+        if not target_student:
+            continue
+        target_submission = submission_by_student_id.get(target_student.id)
+        if not target_submission:
+            continue
+        if target_submission.wanted_roommate_scholar_number != submission.student.scholar_number:
+            continue
+
+        first, second = sorted([submission.student, target_student], key=lambda s: s.scholar_number)
+        pair_key = (first.scholar_number, second.scholar_number)
+        if pair_key in pair_keys:
+            continue
+        pair_keys.add(pair_key)
+        mutual_pairs.append((first, second))
+
+    mutual_pairs.sort(key=lambda item: (item[0].scholar_number, item[1].scholar_number))
+    db.query(RoomAllocation).filter(RoomAllocation.cycle_id == cycle.id).delete()
+
+    assigned_allocations: list[RoomAllocation] = []
+    for room_key, pair in zip(empty_rooms, mutual_pairs):
+        allocation = RoomAllocation(
+            cycle_id=cycle.id,
+            hostel_number=room_key[0],
+            room_number=room_key[1],
+            student_one_id=pair[0].id,
+            student_two_id=pair[1].id,
+        )
+        db.add(allocation)
+        assigned_allocations.append(allocation)
+
+    db.commit()
+    for allocation in assigned_allocations:
+        db.refresh(allocation)
+
+    allocated_pair_keys = {
+        (allocation.student_one.scholar_number, allocation.student_two.scholar_number) for allocation in assigned_allocations
+    }
+    unallocated = [
+        pair for pair in mutual_pairs if (pair[0].scholar_number, pair[1].scholar_number) not in allocated_pair_keys
+    ]
+
+    return AllocationRunResponse(
+        empty_rooms_detected=[RoomOut(hostel_number=item[0], room_number=item[1]) for item in empty_rooms],
+        mutual_pairs_found=[
+            PairOut(
+                student_one_scholar_number=pair[0].scholar_number,
+                student_one_name=pair[0].full_name,
+                student_two_scholar_number=pair[1].scholar_number,
+                student_two_name=pair[1].full_name,
+            )
+            for pair in mutual_pairs
+        ],
+        unallocated_pairs=[
+            PairOut(
+                student_one_scholar_number=pair[0].scholar_number,
+                student_one_name=pair[0].full_name,
+                student_two_scholar_number=pair[1].scholar_number,
+                student_two_name=pair[1].full_name,
+            )
+            for pair in unallocated
+        ],
+        allocations=[serialize_allocation(item) for item in assigned_allocations],
+    )
 
 
 @app.get("/health")
@@ -268,3 +379,27 @@ def export_submissions_csv(
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=submissions.csv"},
     )
+
+
+@app.post("/api/admin/allocations/run", response_model=AllocationRunResponse)
+def admin_run_allocations(
+    db: Session = Depends(get_db),
+    _: Student = Depends(get_current_admin),
+):
+    cycle = get_or_create_active_cycle(db)
+    return run_room_allocation(db, cycle)
+
+
+@app.get("/api/admin/allocations", response_model=list[AllocationOut])
+def admin_list_allocations(
+    db: Session = Depends(get_db),
+    _: Student = Depends(get_current_admin),
+):
+    cycle = get_or_create_active_cycle(db)
+    allocations = (
+        db.query(RoomAllocation)
+        .filter(RoomAllocation.cycle_id == cycle.id)
+        .order_by(RoomAllocation.hostel_number.asc(), RoomAllocation.room_number.asc())
+        .all()
+    )
+    return [serialize_allocation(item) for item in allocations]

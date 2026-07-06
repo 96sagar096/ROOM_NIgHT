@@ -31,9 +31,31 @@ def setup_function():
     try:
         db.add_all(
             [
-                Student(scholar_number="25112011235", full_name="Sagar Burra", hostel_number="H-10 A", room_number="10003"),
-                Student(scholar_number="25116011224", full_name="Harsh Raj", hostel_number="H-10 A", room_number="10003"),
-                Student(scholar_number="25112011112", full_name="Jay Agrawal", hostel_number="H-08 B", room_number="8127"),
+                Student(
+                    scholar_number="25112011235",
+                    full_name="Sagar Burra",
+                    hostel_number="H-10 A",
+                    room_number="10003",
+                    is_admin=True,
+                ),
+                Student(
+                    scholar_number="25116011224",
+                    full_name="Harsh Raj",
+                    hostel_number="H-10 A",
+                    room_number="10003",
+                ),
+                Student(
+                    scholar_number="25112011112",
+                    full_name="Jay Agrawal",
+                    hostel_number="H-08 B",
+                    room_number="8127",
+                ),
+                Student(
+                    scholar_number="25119011111",
+                    full_name="Jatin Arya",
+                    hostel_number="H-08 B",
+                    room_number="8128",
+                ),
             ]
         )
         db.commit()
@@ -42,13 +64,7 @@ def setup_function():
 
 
 def signup_user(scholar_number: str, password: str = "password123"):
-    return client.post(
-        "/api/auth/signup",
-        json={
-            "scholar_number": scholar_number,
-            "password": password,
-        },
-    )
+    return client.post("/api/auth/signup", json={"scholar_number": scholar_number, "password": password})
 
 
 def login_user(scholar_number: str, password: str = "password123"):
@@ -113,3 +129,67 @@ def test_self_reference_roommate_not_allowed():
         },
     )
     assert update.status_code == 400
+
+
+def test_admin_allocation_uses_empty_rooms_and_mutual_pairs():
+    admin = signup_user("25112011235")
+    user_b = signup_user("25116011224")
+    user_c = signup_user("25112011112")
+    user_d = signup_user("25119011111")
+
+    admin_token = admin.json()["access_token"]
+    token_b = user_b.json()["access_token"]
+    token_c = user_c.json()["access_token"]
+    token_d = user_d.json()["access_token"]
+
+    # Room 10003 becomes empty because both current occupants want to move.
+    client.put(
+        "/api/submission",
+        headers=auth_headers(admin_token),
+        json={
+            "wants_change": True,
+            "wanted_roommate_name": "Jay Agrawal",
+            "wanted_roommate_scholar_number": "25112011112",
+        },
+    )
+    client.put(
+        "/api/submission",
+        headers=auth_headers(token_b),
+        json={
+            "wants_change": True,
+            "wanted_roommate_name": "Jatin Arya",
+            "wanted_roommate_scholar_number": "25119011111",
+        },
+    )
+
+    # Mutual pair that should be allocated into empty room 10003.
+    client.put(
+        "/api/submission",
+        headers=auth_headers(token_c),
+        json={
+            "wants_change": True,
+            "wanted_roommate_name": "Jatin Arya",
+            "wanted_roommate_scholar_number": "25119011111",
+        },
+    )
+    client.put(
+        "/api/submission",
+        headers=auth_headers(token_d),
+        json={
+            "wants_change": True,
+            "wanted_roommate_name": "Jay Agrawal",
+            "wanted_roommate_scholar_number": "25112011112",
+        },
+    )
+
+    run_resp = client.post("/api/admin/allocations/run", headers=auth_headers(admin_token))
+    assert run_resp.status_code == 200
+    payload = run_resp.json()
+    assert any(room["room_number"] == "10003" for room in payload["empty_rooms_detected"])
+    assert len(payload["allocations"]) == 1
+    assert payload["allocations"][0]["room_number"] == "10003"
+    allocated = {
+        payload["allocations"][0]["student_one_scholar_number"],
+        payload["allocations"][0]["student_two_scholar_number"],
+    }
+    assert allocated == {"25112011112", "25119011111"}

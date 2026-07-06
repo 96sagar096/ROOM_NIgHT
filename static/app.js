@@ -2,8 +2,10 @@ const authCard = document.getElementById("authCard");
 const dashboard = document.getElementById("dashboard");
 const authMessage = document.getElementById("authMessage");
 const submissionMessage = document.getElementById("submissionMessage");
+const allocationMessage = document.getElementById("allocationMessage");
 const meInfo = document.getElementById("meInfo");
 const submissionsBody = document.getElementById("submissionsBody");
+const allocationBody = document.getElementById("allocationBody");
 const roommateFields = document.getElementById("roommateFields");
 const adminCard = document.getElementById("adminCard");
 
@@ -46,6 +48,11 @@ function renderAuthMessage(text, isError = false) {
 function renderSubmissionMessage(text, isError = false) {
   submissionMessage.textContent = text;
   submissionMessage.className = isError ? "error" : "success";
+}
+
+function renderAllocationMessage(text, isError = false) {
+  allocationMessage.textContent = text;
+  allocationMessage.className = isError ? "error" : "success";
 }
 
 function toggleRoommateFields() {
@@ -103,9 +110,29 @@ function renderSubmissions(rows) {
   }
 }
 
+function renderAllocations(rows) {
+  allocationBody.innerHTML = "";
+  for (const item of rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${item.hostel_number}</td>
+      <td>${item.room_number}</td>
+      <td>${item.student_one_name} (${item.student_one_scholar_number})</td>
+      <td>${item.student_two_name} (${item.student_two_scholar_number})</td>
+    `;
+    allocationBody.appendChild(tr);
+  }
+}
+
 async function loadSubmissions() {
   const rows = await api("/api/submissions");
   renderSubmissions(rows);
+}
+
+async function loadAllocations() {
+  if (!currentUser || !currentUser.is_admin) return;
+  const rows = await api("/api/admin/allocations");
+  renderAllocations(rows);
 }
 
 document.getElementById("signupForm").addEventListener("submit", async (e) => {
@@ -124,6 +151,7 @@ document.getElementById("signupForm").addEventListener("submit", async (e) => {
     await loadMe();
     await loadMySubmission();
     await loadSubmissions();
+    await loadAllocations();
   } catch (err) {
     renderAuthMessage(err.message, true);
   }
@@ -145,6 +173,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     await loadMe();
     await loadMySubmission();
     await loadSubmissions();
+    await loadAllocations();
   } catch (err) {
     renderAuthMessage(err.message, true);
   }
@@ -197,12 +226,25 @@ document.getElementById("downloadCsvBtn").addEventListener("click", () => {
     .catch((err) => renderSubmissionMessage(err.message, true));
 });
 
+document.getElementById("runAllocationBtn").addEventListener("click", async () => {
+  try {
+    const result = await api("/api/admin/allocations/run", { method: "POST" });
+    renderAllocationMessage(
+      `Allocations complete: ${result.allocations.length} room(s) allocated, ${result.unallocated_pairs.length} pair(s) pending`,
+    );
+    await loadAllocations();
+  } catch (err) {
+    renderAllocationMessage(err.message, true);
+  }
+});
+
 async function init() {
   if (!getToken()) return;
   try {
     await loadMe();
     await loadMySubmission();
     await loadSubmissions();
+    await loadAllocations();
   } catch (_) {
     clearAuth();
   }

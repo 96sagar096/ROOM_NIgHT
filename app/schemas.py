@@ -84,3 +84,33 @@ class ActiveCycleOut(BaseModel):
     is_active: bool
     starts_at: datetime
     ends_at: datetime | None
+
+
+class AllocationOut(BaseModel):
+    id: int
+    hostel_number: str
+    room_number: str
+    student_one_scholar_number: str
+    student_one_name: str
+    student_two_scholar_number: str
+    student_two_name: str
+    created_at: datetime
+
+
+class PairOut(BaseModel):
+    student_one_scholar_number: str
+    student_one_name: str
+    student_two_scholar_number: str
+    student_two_name: str
+
+
+class RoomOut(BaseModel):
+    hostel_number: str
+    room_number: str
+
+
+class AllocationRunResponse(BaseModel):
+    empty_rooms_detected: list[RoomOut]
+    mutual_pairs_found: list[PairOut]
+    unallocated_pairs: list[PairOut]
+    allocations: list[AllocationOut]

@@ -38,6 +38,7 @@ class ExchangeCycle(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     submissions: Mapped[list["VoteSubmission"]] = relationship(back_populates="cycle")
+    allocations: Mapped[list["RoomAllocation"]] = relationship(back_populates="cycle")
 
 
 class VoteSubmission(Base):
@@ -61,3 +62,24 @@ class VoteSubmission(Base):
 
     student: Mapped["Student"] = relationship(back_populates="submissions")
     cycle: Mapped["ExchangeCycle"] = relationship(back_populates="submissions")
+
+
+class RoomAllocation(Base):
+    __tablename__ = "room_allocations"
+    __table_args__ = (
+        UniqueConstraint("cycle_id", "hostel_number", "room_number", name="uq_cycle_room_allocation"),
+        UniqueConstraint("cycle_id", "student_one_id", name="uq_cycle_student_one_allocation"),
+        UniqueConstraint("cycle_id", "student_two_id", name="uq_cycle_student_two_allocation"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    cycle_id: Mapped[int] = mapped_column(ForeignKey("exchange_cycles.id"), nullable=False, index=True)
+    hostel_number: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    room_number: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    student_one_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False, index=True)
+    student_two_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    cycle: Mapped["ExchangeCycle"] = relationship(back_populates="allocations")
+    student_one: Mapped["Student"] = relationship(foreign_keys=[student_one_id])
+    student_two: Mapped["Student"] = relationship(foreign_keys=[student_two_id])
