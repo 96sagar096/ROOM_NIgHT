@@ -31,6 +31,45 @@ def parse_hostel_heading(line: str) -> str | None:
 def parse_records(text: str) -> list[dict[str, str]]:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     records: list[dict[str, str]] = []
+    
+    # Try horizontal single-line parser first
+    single_line_pattern = re.compile(
+        r"^\s*(\d+)\s+(.+?)\s+(\d{8,15})\s+(\S+)(?:\s+(?:Double|Single|Occupancy))?", 
+        re.IGNORECASE
+    )
+    
+    for line in lines:
+        match = single_line_pattern.match(line)
+        if match:
+            name = normalize_spaces(match.group(2))
+            scholar_number = match.group(3)
+            code = match.group(4)
+            
+            code_match = re.match(r"^[Hh](\d+)-?([A-Za-z]+)(\d+)", code)
+            if code_match:
+                hostel_num = int(code_match.group(1))
+                wing = code_match.group(2).upper()
+                room_num = code_match.group(3)
+                
+                hostel_number = f"H-{hostel_num:02d} {wing}"
+                room_number = f"{hostel_num}{room_num}"
+            else:
+                hostel_number = "UNKNOWN"
+                room_number = code
+                
+            records.append(
+                {
+                    "scholar_number": scholar_number,
+                    "full_name": name,
+                    "hostel_number": hostel_number,
+                    "room_number": room_number,
+                }
+            )
+            
+    if records:
+        return records
+
+    # Fallback to original vertical parser
     current_hostel = ""
     i = 0
     while i < len(lines):
@@ -87,6 +126,7 @@ def parse_records(text: str) -> list[dict[str, str]]:
             }
         )
     return records
+
 
 
 def main():
